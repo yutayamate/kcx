@@ -21,18 +21,18 @@ jobs:
       - name: Build
         run: |
           mkdir -p dist
-          swiftc -O -framework Security Sources/kcrun/main.swift -o dist/kcrun
-          shasum -a 256 dist/kcrun > dist/SHA256SUMS
+          swiftc -O -framework Security Sources/kcx/main.swift -o dist/kcx
+          shasum -a 256 dist/kcx > dist/SHA256SUMS
 
       - name: Test
-        run: sh Tests/integration.sh dist/kcrun
+        run: sh Tests/integration.sh dist/kcx
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kcrun-macos-${{ runner.arch }}-${{ github.sha }}
+          name: kcx-macos-${{ runner.arch }}-${{ github.sha }}
           path: |
-            dist/kcrun
+            dist/kcx
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 30

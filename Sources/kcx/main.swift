@@ -14,21 +14,21 @@ struct HeaderMapping {
 }
 
 func fail(_ message: String, status: Int32 = 2) -> Never {
-    FileHandle.standardError.write(Data("kcrun: \(message)\n".utf8))
+    FileHandle.standardError.write(Data("kcx: \(message)\n".utf8))
     exit(status)
 }
 
 func usageError(_ message: String) -> Never {
-    fail("\(message)\nRun 'kcrun --help' for usage.")
+    fail("\(message)\nRun 'kcx --help' for usage.")
 }
 
 func showHelp() -> Never {
     let help = """
     Usage:
-      kcrun run --env NAME=SERVICE [--env NAME=SERVICE ...] -- COMMAND [ARGS...]
-      kcrun generate [--format FORMAT] (--header NAME=SERVICE | --bearer SERVICE) ...
-      kcrun completion zsh|bash
-      kcrun --help
+      kcx run --env NAME=SERVICE [--env NAME=SERVICE ...] -- COMMAND [ARGS...]
+      kcx generate [--format FORMAT] (--header NAME=SERVICE | --bearer SERVICE) ...
+      kcx completion zsh|bash
+      kcx --help
 
     Read generic passwords from the macOS Keychain. Run injects values as
     environment variables; generate prints HTTP headers as JSON.
@@ -53,8 +53,8 @@ func showHelp() -> Never {
       -h, --help          Show this help.
 
     Examples:
-      kcrun run --env API_KEY=my-api-key -- my-tool --option value
-      kcrun generate --format json --header X-API-Key=my-api-key --bearer access-token
+      kcx run --env API_KEY=my-api-key -- my-tool --option value
+      kcx generate --format json --header X-API-Key=my-api-key --bearer access-token
 
     Store a secret without putting its value in shell history:
       security add-generic-password -a "$USER" -s my-api-key -w
@@ -70,7 +70,7 @@ func showCompletions(for shell: String) -> Never {
     switch shell {
     case "zsh":
         script = #"""
-        _kcrun() {
+        _kcx() {
           if (( ${words[(I)--]} )); then
             _normal
             return
@@ -101,11 +101,11 @@ func showCompletions(for shell: String) -> Never {
           esac
         }
 
-        compdef _kcrun kcrun
+        compdef _kcx kcx
         """#
     case "bash":
         script = #"""
-        _kcrun_complete() {
+        _kcx_complete() {
           local cur prev i separator_index=-1 subcommand=""
           cur=${COMP_WORDS[COMP_CWORD]}
           prev=${COMP_WORDS[COMP_CWORD-1]}
@@ -150,7 +150,7 @@ func showCompletions(for shell: String) -> Never {
           esac
         }
 
-        complete -o bashdefault -o default -F _kcrun_complete kcrun
+        complete -o bashdefault -o default -F _kcx_complete kcx
         """#
     default:
         usageError("unsupported completion shell '\(shell)'; choose 'zsh' or 'bash'")
@@ -162,9 +162,9 @@ func showCompletions(for shell: String) -> Never {
 func keychainHint(for status: OSStatus) -> String {
     switch status {
     case errSecInteractionNotAllowed:
-        return "The Keychain may be locked or macOS may need permission to let kcrun read this item. Unlock the Keychain in Keychain Access and approve access if prompted."
+        return "The Keychain may be locked or macOS may need permission to let kcx read this item. Unlock the Keychain in Keychain Access and approve access if prompted."
     case errSecAuthFailed:
-        return "Keychain access was denied. Check the item's access controls in Keychain Access and allow kcrun to read it."
+        return "Keychain access was denied. Check the item's access controls in Keychain Access and allow kcx to read it."
     case errSecUserCanceled:
         return "Keychain access was cancelled. Retry and approve the access request if prompted."
     case errSecNoSuchKeychain:
@@ -172,7 +172,7 @@ func keychainHint(for status: OSStatus) -> String {
     case errSecNotAvailable:
         return "Keychain services are unavailable. Confirm this is a macOS session with Keychain access."
     default:
-        return "Check that the Keychain is available and that kcrun is allowed to read the item."
+        return "Check that the Keychain is available and that kcx is allowed to read the item."
     }
 }
 

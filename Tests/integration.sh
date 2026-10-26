@@ -1,22 +1,22 @@
 #!/bin/sh
 set -eu
 
-binary=${1:-dist/kcrun}
+binary=${1:-dist/kcx}
 if [ ! -x "$binary" ]; then
   echo "test: executable not found: $binary" >&2
   exit 2
 fi
 
-service="kcrun-test-$$-$(date +%s)"
+service="kcx-test-$$-$(date +%s)"
 second_service="${service}-second"
-account="kcrun-test"
-secret="kcrun-integration-test-secret"
-second_secret="kcrun-second-integration-test-secret"
-marker="${TMPDIR:-/tmp}/kcrun-test-marker-$$"
-stdout_file="${TMPDIR:-/tmp}/kcrun-test-stdout-$$"
-stderr_file="${TMPDIR:-/tmp}/kcrun-test-stderr-$$"
-keychain_path="${TMPDIR:-/tmp}/kcrun-test-$$.keychain-db"
-keychain_password="kcrun-test-keychain-password"
+account="kcx-test"
+secret="kcx-integration-test-secret"
+second_secret="kcx-second-integration-test-secret"
+marker="${TMPDIR:-/tmp}/kcx-test-marker-$$"
+stdout_file="${TMPDIR:-/tmp}/kcx-test-stdout-$$"
+stderr_file="${TMPDIR:-/tmp}/kcx-test-stderr-$$"
+keychain_path="${TMPDIR:-/tmp}/kcx-test-$$.keychain-db"
+keychain_password="kcx-test-keychain-password"
 original_keychains=$(security list-keychains -d user | sed 's/^[[:space:]]*//; s/^"//; s/"$//')
 
 cleanup() {
@@ -38,20 +38,20 @@ echo "test: checking help output"
 "$binary" --help >"$stdout_file" 2>"$stderr_file"
 grep -q '^Usage:' "$stdout_file"
 grep -q -- '--env NAME=SERVICE' "$stdout_file"
-grep -q 'kcrun generate' "$stdout_file"
+grep -q 'kcx generate' "$stdout_file"
 grep -q -- 'Generate options (only valid after' "$stdout_file"
 grep -q -- '--format FORMAT' "$stdout_file"
 test ! -s "$stderr_file"
 
 echo "test: checking generated shell completion"
 "$binary" completion zsh >"$stdout_file" 2>"$stderr_file"
-grep -q 'compdef _kcrun kcrun' "$stdout_file"
+grep -q 'compdef _kcx kcx' "$stdout_file"
 grep -q 'run)' "$stdout_file"
 grep -q 'generate)' "$stdout_file"
 test ! -s "$stderr_file"
 zsh -n "$stdout_file"
 "$binary" completion bash >"$stdout_file" 2>"$stderr_file"
-grep -q 'complete -o bashdefault -o default -F _kcrun_complete kcrun' "$stdout_file"
+grep -q 'complete -o bashdefault -o default -F _kcx_complete kcx' "$stdout_file"
 grep -q 'run) COMPREPLY=' "$stdout_file"
 grep -q 'generate) COMPREPLY=' "$stdout_file"
 test ! -s "$stderr_file"
@@ -76,7 +76,7 @@ set -e
 test "$argument_status" -eq 2
 test ! -s "$stdout_file"
 grep -q -- "--env requires a NAME=SERVICE mapping" "$stderr_file"
-grep -q "kcrun --help" "$stderr_file"
+grep -q "kcx --help" "$stderr_file"
 
 set +e
 "$binary" headers --bearer service >"$stdout_file" 2>"$stderr_file"
@@ -128,10 +128,10 @@ security add-generic-password -U -a "$account" -s "$second_service" -w "$second_
 # The child confirms injection without printing the secret.
 echo "test: checking multiple environment mappings"
 "$binary" run \
-  --env KCRUN_TEST_SECRET="$service" \
-  --env KCRUN_TEST_SECRET_TWO="$second_service" \
+  --env KCX_TEST_SECRET="$service" \
+  --env KCX_TEST_SECRET_TWO="$second_service" \
   -- /bin/sh -c \
-  'test "$KCRUN_TEST_SECRET" = "$1" && test "$KCRUN_TEST_SECRET_TWO" = "$2" && printf "injection-ok\n"' \
+  'test "$KCX_TEST_SECRET" = "$1" && test "$KCX_TEST_SECRET_TWO" = "$2" && printf "injection-ok\n"' \
   sh "$secret" "$second_secret" >"$stdout_file" 2>"$stderr_file"
 test "$(cat "$stdout_file")" = "injection-ok"
 test ! -s "$stderr_file"
@@ -182,8 +182,8 @@ grep -q "was specified more than once" "$stderr_file"
 echo "test: checking missing-item failure"
 missing_service="$service-missing"
 if "$binary" \
-  --env KCRUN_TEST_SECRET="$service" \
-  --env KCRUN_TEST_SECRET_TWO="$missing_service" \
+  --env KCX_TEST_SECRET="$service" \
+  --env KCX_TEST_SECRET_TWO="$missing_service" \
   -- /usr/bin/touch "$marker" \
   >"$stdout_file" 2>"$stderr_file"; then
   echo "test: missing Keychain item unexpectedly succeeded" >&2
@@ -193,10 +193,10 @@ test ! -e "$marker"
 test ! -s "$stdout_file"
 grep -q "no generic password found for Keychain service" "$stderr_file"
 
-# The command's exit status must pass through kcrun.
+# The command's exit status must pass through kcx.
 echo "test: checking child exit status"
 set +e
-"$binary" --env KCRUN_TEST_SECRET="$service" -- /bin/sh -c 'exit 23' \
+"$binary" --env KCX_TEST_SECRET="$service" -- /bin/sh -c 'exit 23' \
   >"$stdout_file" 2>"$stderr_file"
 child_status=$?
 set -e
@@ -204,7 +204,7 @@ test "$child_status" -eq 23
 
 echo "test: checking command-not-found guidance"
 set +e
-"$binary" --env KCRUN_TEST_SECRET="$service" -- kcrun-command-that-does-not-exist \
+"$binary" --env KCX_TEST_SECRET="$service" -- kcx-command-that-does-not-exist \
   >"$stdout_file" 2>"$stderr_file"
 child_status=$?
 set -e
@@ -213,4 +213,4 @@ test ! -s "$stdout_file"
 grep -q "was not found" "$stderr_file"
 grep -q "PATH" "$stderr_file"
 
-echo "kcrun integration tests passed"
+echo "kcx integration tests passed"
