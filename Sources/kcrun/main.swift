@@ -7,6 +7,12 @@ struct EnvironmentMapping {
     let service: String
 }
 
+struct HeaderMapping {
+    let name: String
+    let service: String
+    let bearer: Bool
+}
+
 func fail(_ message: String, status: Int32 = 2) -> Never {
     FileHandle.standardError.write(Data("kcrun: \(message)\n".utf8))
     exit(status)
@@ -19,28 +25,41 @@ func usageError(_ message: String) -> Never {
 func showHelp() -> Never {
     let help = """
     Usage:
-      kcrun --env NAME=SERVICE [--env NAME=SERVICE ...] -- COMMAND [ARGS...]
+      kcrun run --env NAME=SERVICE [--env NAME=SERVICE ...] -- COMMAND [ARGS...]
+      kcrun generate [--format FORMAT] (--header NAME=SERVICE | --bearer SERVICE) ...
       kcrun completion zsh|bash
       kcrun --help
 
-    Read generic passwords from the macOS Keychain, set them as environment
-    variables, and replace kcrun with the requested command.
+    Read generic passwords from the macOS Keychain. Run injects values as
+    environment variables; generate prints HTTP headers as JSON.
 
-    Options:
-      --env NAME=SERVICE  Set NAME to the Keychain generic password for SERVICE.
-                          Repeat to provide multiple variables.
-      -h, --help          Show this help.
+    Commands:
+      run       Inject Keychain values into a command's environment.
+      generate  Generate output from Keychain values in a selected format.
       completion SHELL   Print shell completion code for zsh or Bash.
 
+    Run options:
+      --env NAME=SERVICE  Set NAME to the Keychain generic password for SERVICE.
+                          Repeat to provide multiple variables.
+      --                 Start the command and its arguments.
+
+    Generate options (only valid after 'generate'):
+      --format FORMAT     Output format (json; default: json).
+      --header NAME=SERVICE
+                          Add a header with the Keychain value unchanged.
+      --bearer SERVICE    Add Authorization: Bearer <Keychain value>.
+
+    General options:
+      -h, --help          Show this help.
+
     Examples:
-      kcrun --env API_KEY=my-api-key -- my-tool --option value
-      kcrun --env API_KEY=service-one --env TOKEN=service-two -- my-tool
+      kcrun run --env API_KEY=my-api-key -- my-tool --option value
+      kcrun generate --format json --header X-API-Key=my-api-key --bearer access-token
 
     Store a secret without putting its value in shell history:
       security add-generic-password -a "$USER" -s my-api-key -w
 
-    The command starts only after every requested Keychain item has been read.
-    Secret values are not printed by kcrun.
+    A command starts only after every requested Keychain item has been read.
     """
     FileHandle.standardOutput.write(Data((help + "\n").utf8))
     exit(0)
@@ -57,10 +76,29 @@ func showCompletions(for shell: String) -> Never {
             return
           fi
 
-          _arguments -s \
-            '(-h --help)'{-h,--help}'[Show help]' \
-            '--env[Set an environment variable from a Keychain service]:NAME=SERVICE:' \
-            '--[Start the command and its arguments]'
+          case $words[2] in
+            run)
+              _arguments -s \
+                '(-h --help)'{-h,--help}'[Show help]' \
+                '--env[Set an environment variable from a Keychain service]:NAME=SERVICE:' \
+                '--[Start the command and its arguments]'
+              ;;
+            generate)
+              _arguments -s \
+                '(-h --help)'{-h,--help}'[Show help]' \
+                '--format[Select generate output format]:FORMAT:(json)' \
+                '--header[Add an HTTP header from a Keychain service]:NAME=SERVICE:' \
+                '--bearer[Add an Authorization bearer token from a Keychain service]:SERVICE:'
+              ;;
+            completion)
+              _arguments '2:shell:(zsh bash)'
+              ;;
+            *)
+              _arguments -s \
+                '1:command:(run generate completion)' \
+                '(-h --help)'{-h,--help}'[Show help]'
+              ;;
+          esac
         }
 
         compdef _kcrun kcrun
@@ -68,9 +106,18 @@ func showCompletions(for shell: String) -> Never {
     case "bash":
         script = #"""
         _kcrun_complete() {
-          local cur prev i separator_index=-1
+          local cur prev i separator_index=-1 subcommand=""
           cur=${COMP_WORDS[COMP_CWORD]}
           prev=${COMP_WORDS[COMP_CWORD-1]}
+
+          for ((i = 1; i < COMP_CWORD; i++)); do
+            case ${COMP_WORDS[i]} in
+              run|generate|completion)
+                subcommand=${COMP_WORDS[i]}
+                break
+                ;;
+            esac
+          done
 
           for ((i = 1; i < COMP_CWORD; i++)); do
             if [[ ${COMP_WORDS[i]} == -- ]]; then
@@ -86,12 +133,21 @@ func showCompletions(for shell: String) -> Never {
             return 0
           fi
 
-          if [[ $prev == --env ]]; then
+          if [[ $prev == --env || $prev == --header || $prev == --bearer ]]; then
             compopt +o bashdefault +o default
             return 0
           fi
+          if [[ $prev == --format ]]; then
+            COMPREPLY=( $(compgen -W "json" -- "$cur") )
+            return 0
+          fi
 
-          COMPREPLY=( $(compgen -W "--env --help -h -- completion" -- "$cur") )
+          case $subcommand in
+            run) COMPREPLY=( $(compgen -W "--env --help -h --" -- "$cur") ) ;;
+            generate) COMPREPLY=( $(compgen -W "--format --header --bearer --help -h" -- "$cur") ) ;;
+            completion) COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") ) ;;
+            *) COMPREPLY=( $(compgen -W "run generate completion --help -h" -- "$cur") ) ;;
+          esac
         }
 
         complete -o bashdefault -o default -F _kcrun_complete kcrun
@@ -146,7 +202,105 @@ func readSecret(service: String) -> String {
     return secret
 }
 
-let arguments = Array(CommandLine.arguments.dropFirst())
+func parsePair(_ value: String, option: String) -> (String, String) {
+    guard let separator = value.firstIndex(of: "=") else {
+        usageError("invalid value for \(option) '\(value)'; expected NAME=SERVICE")
+    }
+    let name = String(value[..<separator])
+    let service = String(value[value.index(after: separator)...])
+    guard !name.isEmpty else { usageError("HTTP header name must not be empty") }
+    guard !service.isEmpty else { usageError("Keychain service name must not be empty") }
+    return (name, service)
+}
+
+func generateHeaders(_ arguments: [String]) -> Never {
+    var mappings: [HeaderMapping] = []
+    var headerNames = Set<String>()
+    var outputFormat = "json"
+    var formatWasSpecified = false
+    var index = 0
+
+    while index < arguments.count {
+        let option = arguments[index]
+        if option == "--help" || option == "-h" {
+            showHelp()
+        }
+        if option == "--format" {
+            guard !formatWasSpecified else { usageError("--format may only be specified once") }
+            index += 1
+            guard index < arguments.count else { usageError("--format requires a value (currently only 'json' is supported)") }
+            outputFormat = arguments[index]
+            guard outputFormat == "json" else {
+                usageError("unsupported output format '\(outputFormat)'; currently only 'json' is supported")
+            }
+            formatWasSpecified = true
+            index += 1
+            continue
+        }
+        guard option == "--header" || option == "--bearer" else {
+            usageError("unexpected option or argument '\(option)'; use --format json, --header NAME=SERVICE, and/or --bearer SERVICE")
+        }
+        index += 1
+        guard index < arguments.count else { usageError("\(option) requires a value") }
+
+        let name: String
+        let service: String
+        let bearer = option == "--bearer"
+        if bearer {
+            name = "Authorization"
+            service = arguments[index]
+            guard !service.isEmpty else { usageError("Keychain service name must not be empty") }
+        } else {
+            (name, service) = parsePair(arguments[index], option: option)
+            guard name.range(of: #"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"#, options: .regularExpression) != nil else {
+                usageError("invalid HTTP header name '\(name)'")
+            }
+        }
+
+        guard headerNames.insert(name.lowercased()).inserted else {
+            usageError("HTTP header '\(name)' was specified more than once")
+        }
+        mappings.append(HeaderMapping(name: name, service: service, bearer: bearer))
+        index += 1
+    }
+
+    guard !mappings.isEmpty else {
+        usageError("at least one --header NAME=SERVICE or --bearer SERVICE is required")
+    }
+
+    var headers: [String: String] = [:]
+    for mapping in mappings {
+        let secret = readSecret(service: mapping.service)
+        guard !secret.isEmpty else { fail("Keychain value for service '\(mapping.service)' is empty") }
+        guard !secret.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+            fail("Keychain value for service '\(mapping.service)' contains control characters and cannot be used as an HTTP header")
+        }
+        headers[mapping.name] = mapping.bearer ? "Bearer \(secret)" : secret
+    }
+
+    switch outputFormat {
+    case "json":
+        do {
+            var data = try JSONSerialization.data(withJSONObject: headers, options: [.sortedKeys])
+            data.append(0x0A)
+            FileHandle.standardOutput.write(data)
+        } catch {
+            fail("could not encode HTTP headers as JSON")
+        }
+    default:
+        fail("unsupported output format '\(outputFormat)'")
+    }
+    exit(0)
+}
+
+var arguments = Array(CommandLine.arguments.dropFirst())
+if arguments.first == "generate" {
+    arguments.removeFirst()
+    generateHeaders(arguments)
+}
+if arguments.first == "run" {
+    arguments.removeFirst()
+}
 if arguments.first == "completion" {
     guard arguments.count == 2 else {
         usageError("'completion' requires one shell name: zsh or bash")

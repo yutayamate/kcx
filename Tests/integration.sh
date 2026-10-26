@@ -38,15 +38,22 @@ echo "test: checking help output"
 "$binary" --help >"$stdout_file" 2>"$stderr_file"
 grep -q '^Usage:' "$stdout_file"
 grep -q -- '--env NAME=SERVICE' "$stdout_file"
+grep -q 'kcrun generate' "$stdout_file"
+grep -q -- 'Generate options (only valid after' "$stdout_file"
+grep -q -- '--format FORMAT' "$stdout_file"
 test ! -s "$stderr_file"
 
 echo "test: checking generated shell completion"
 "$binary" completion zsh >"$stdout_file" 2>"$stderr_file"
 grep -q 'compdef _kcrun kcrun' "$stdout_file"
+grep -q 'run)' "$stdout_file"
+grep -q 'generate)' "$stdout_file"
 test ! -s "$stderr_file"
 zsh -n "$stdout_file"
 "$binary" completion bash >"$stdout_file" 2>"$stderr_file"
 grep -q 'complete -o bashdefault -o default -F _kcrun_complete kcrun' "$stdout_file"
+grep -q 'run) COMPREPLY=' "$stdout_file"
+grep -q 'generate) COMPREPLY=' "$stdout_file"
 test ! -s "$stderr_file"
 bash -n "$stdout_file"
 set +e
@@ -70,6 +77,30 @@ test "$argument_status" -eq 2
 test ! -s "$stdout_file"
 grep -q -- "--env requires a NAME=SERVICE mapping" "$stderr_file"
 grep -q "kcrun --help" "$stderr_file"
+
+set +e
+"$binary" headers --bearer service >"$stdout_file" 2>"$stderr_file"
+argument_status=$?
+set -e
+test "$argument_status" -eq 2
+test ! -s "$stdout_file"
+grep -q "unexpected option or argument 'headers'" "$stderr_file"
+
+set +e
+"$binary" run --format json -- /usr/bin/true >"$stdout_file" 2>"$stderr_file"
+argument_status=$?
+set -e
+test "$argument_status" -eq 2
+test ! -s "$stdout_file"
+grep -q "unexpected option or argument '--format'" "$stderr_file"
+
+set +e
+"$binary" generate --env TOKEN=service -- /usr/bin/true >"$stdout_file" 2>"$stderr_file"
+argument_status=$?
+set -e
+test "$argument_status" -eq 2
+test ! -s "$stdout_file"
+grep -q "unexpected option or argument '--env'" "$stderr_file"
 
 set +e
 "$binary" --env BAD-NAME=service -- /usr/bin/true >"$stdout_file" 2>"$stderr_file"
@@ -96,7 +127,7 @@ security add-generic-password -U -a "$account" -s "$second_service" -w "$second_
 
 # The child confirms injection without printing the secret.
 echo "test: checking multiple environment mappings"
-"$binary" \
+"$binary" run \
   --env KCRUN_TEST_SECRET="$service" \
   --env KCRUN_TEST_SECRET_TWO="$second_service" \
   -- /bin/sh -c \
@@ -104,6 +135,47 @@ echo "test: checking multiple environment mappings"
   sh "$secret" "$second_secret" >"$stdout_file" 2>"$stderr_file"
 test "$(cat "$stdout_file")" = "injection-ok"
 test ! -s "$stderr_file"
+
+# Generate JSON headers from Keychain values without contaminating stderr.
+echo "test: checking generated HTTP headers"
+"$binary" generate --format json \
+  --header X-API-Key="$service" \
+  --bearer "$second_service" >"$stdout_file" 2>"$stderr_file"
+expected_json=$(printf '{"Authorization":"Bearer %s","X-API-Key":"%s"}' "$second_secret" "$secret")
+test "$(cat "$stdout_file")" = "$expected_json"
+test ! -s "$stderr_file"
+
+# JSON remains the default when --format is omitted.
+"$binary" generate --bearer "$service" >"$stdout_file" 2>"$stderr_file"
+test "$(cat "$stdout_file")" = "$(printf '{"Authorization":"Bearer %s"}' "$secret")"
+test ! -s "$stderr_file"
+
+# Unsupported formats are rejected without writing output.
+if "$binary" generate --format yaml --bearer "$service" >"$stdout_file" 2>"$stderr_file"; then
+  echo "test: unsupported output format unexpectedly succeeded" >&2
+  exit 1
+fi
+test ! -s "$stdout_file"
+grep -q "only 'json' is supported" "$stderr_file"
+
+# Missing Keychain values must not result in partial JSON.
+missing_service="$service-missing"
+if "$binary" generate --header X-API-Key="$service" --bearer "$missing_service" \
+  >"$stdout_file" 2>"$stderr_file"; then
+  echo "test: missing header Keychain item unexpectedly succeeded" >&2
+  exit 1
+fi
+test ! -s "$stdout_file"
+grep -q "no generic password found for Keychain service" "$stderr_file"
+
+# Duplicate header names are rejected case-insensitively.
+if "$binary" generate --header X-API-Key="$service" --header x-api-key="$second_service" \
+  >"$stdout_file" 2>"$stderr_file"; then
+  echo "test: duplicate header unexpectedly succeeded" >&2
+  exit 1
+fi
+test ! -s "$stdout_file"
+grep -q "was specified more than once" "$stderr_file"
 
 # A failed lookup must not start the requested command, even if an earlier
 # mapping resolved successfully.

@@ -18,13 +18,39 @@ With no value after `-w`, `security` prompts for the secret instead of putting i
 Pass one or more environment-variable mappings, then `--`, then the command to run:
 
 ```sh
-kcrun \
+kcrun run \
   --env MCP_API_KEY1=example-mcp-api-key1 \
   --env MCP_API_KEY2=example-mcp-api-key2 \
   -- my-tool --option value
 ```
 
-`NAME` must be a valid environment-variable name. Existing environment variables are inherited, and values loaded from Keychain override matching names. The command and its arguments follow `--`. Run `kcrun --help` for a concise usage summary.
+`NAME` must be a valid environment-variable name. Existing environment variables are inherited, and values loaded from Keychain override matching names. The command and its arguments follow `--`. The previous invocation without `run` remains supported. Run `kcrun --help` for a concise usage summary.
+
+## Generate HTTP headers
+
+For HTTP MCP servers, `kcrun generate` can return Keychain values as a JSON object suitable for Codex's `http_headers_helper`. The `--format`, `--header`, and `--bearer` options are only available to `generate`. Use `--header NAME=SERVICE` for a header whose value is the Keychain item as stored. Use `--bearer SERVICE` to create an `Authorization` header with the `Bearer ` scheme. Both header options can be repeated. `--format` selects the output format; `json` is currently the only supported value and the default:
+
+```sh
+kcrun generate --format json \
+  --header X-API-Key=example-mcp-api-key1 \
+  --bearer example-mcp-access-token
+```
+
+The command prints JSON to stdout, for example:
+
+```json
+{"Authorization":"Bearer …","X-API-Key":"…"}
+```
+
+Configure Codex to run it as the helper:
+
+```toml
+[mcp_servers.example]
+url = "http://localhost:4444/mcp"
+http_headers_helper = "/absolute/path/to/kcrun generate --format json --bearer grafana_service_account_token"
+```
+
+Replace the path with the location of the `kcrun` executable. The helper output necessarily contains the header values so Codex can send them; `generate` writes only JSON to stdout and sends errors to stderr. It resolves all requested Keychain items before writing output, so a failed lookup does not produce partial JSON. Do not redirect or log the generated output.
 
 ## Shell completion
 
@@ -85,7 +111,7 @@ See the [Codex configuration reference](https://developers.openai.com/codex/conf
 
 ## What kcrun does
 
-`kcrun` reads every requested Keychain item before starting the command. If a mapping is invalid, a value cannot be read, or a Keychain item is missing, the command is not started. Secret values are not printed; diagnostics go to stderr, and stdout is left for the command. `kcrun` replaces itself with the command, so the command's exit status is returned directly.
+`kcrun run` reads every requested Keychain item before starting the command. If a mapping is invalid, a value cannot be read, or a Keychain item is missing, the command is not started. Secret values are not printed by `run`; diagnostics go to stderr, and stdout is left for the command. `kcrun` replaces itself with the command, so the command's exit status is returned directly. `generate` is a separate helper mode: it prints the requested headers as JSON to stdout.
 
 ## Security considerations
 
@@ -99,7 +125,7 @@ Keeping a secret in Keychain and supplying it only when starting a command can r
 
 This is a way to reduce where secrets are stored; it does not make a compromised Mac safe. Information stealers commonly target saved browser credentials, cookies, and other session data. Although browser password databases may be encrypted, malware running as the logged-in user can sometimes extract credentials from them. Attackers also target local credential files, private keys, shell history, and macOS Keychain itself. [MITRE ATT&CK: browser credentials](https://attack.mitre.org/techniques/T1555/003/), [Keychain](https://attack.mitre.org/techniques/T1555/001/), and the [Australian Cyber Security Centre's information-stealer guidance](https://www.cyber.gov.au/guidance/learn-about-information-stealer-malware).
 
-The secret must be present in the child process's environment while it runs. The child and its descendants can read it, and software with sufficient access may inspect process environments. A child can also log or transmit the value. Keychain access controls, a secure macOS account, and trust in the command being launched remain essential.
+With `run`, the secret must be present in the child process's environment while it runs. The child and its descendants can read it, and software with sufficient access may inspect process environments. A child can also log or transmit the value. With `generate`, the secret is emitted as JSON to stdout for the helper protocol and is then available to the caller. Keychain access controls, a secure macOS account, and trust in the consuming program remain essential.
 
 ## Build from source
 
