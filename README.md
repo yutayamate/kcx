@@ -4,6 +4,24 @@
 
 [![Build and test](https://github.com/yutayamate/kcx/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/yutayamate/kcx/actions/workflows/build.yml) [![Latest release](https://img.shields.io/github/v/release/yutayamate/kcx)](https://github.com/yutayamate/kcx/releases/latest) [![License](https://img.shields.io/github/license/yutayamate/kcx)](LICENSE)
 
+## Install with Homebrew
+
+Install `kcx` from the `yutayamate/tap` Homebrew tap:
+
+```sh
+brew tap yutayamate/tap
+brew install yutayamate/tap/kcx
+```
+
+The formula builds the pinned source locally and requires the Swift Command Line Tools. The tap checks for new stable releases hourly. This avoids downloading the unsigned release binary.
+
+Upgrade with:
+
+```sh
+brew update
+brew upgrade yutayamate/tap/kcx
+```
+
 ## Use kcx
 
 Save each secret as a generic password in Keychain. The service name identifies the item when you run `kcx`:
@@ -136,24 +154,6 @@ swiftc -O -framework Security Sources/kcx/main.swift -o kcx
 ```
 
 The resulting `kcx` executable is created in the current directory.
-
-## Install with Homebrew
-
-Install `kcx` from the `yutayamate/tap` Homebrew tap:
-
-```sh
-brew tap yutayamate/tap
-brew install yutayamate/tap/kcx
-```
-
-The formula builds the pinned source locally and requires the Swift Command Line Tools. The tap checks for new stable releases hourly. This avoids downloading the unsigned release binary.
-
-Upgrade with:
-
-```sh
-brew update
-brew upgrade yutayamate/tap/kcx
-```
 
 ## Automated builds and tests
 
