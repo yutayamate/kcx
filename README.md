@@ -137,6 +137,26 @@ swiftc -O -framework Security Sources/kcx/main.swift -o kcx
 
 The resulting `kcx` executable is created in the current directory.
 
+## Install with Homebrew
+
+Install `kcx` from the `yutayamate/tap` Homebrew tap:
+
+```sh
+brew tap yutayamate/tap
+brew install yutayamate/tap/kcx
+```
+
+The tap's GitHub repository is `yutayamate/homebrew-tap`; Homebrew shortens that repository name to `yutayamate/tap` in tap commands.
+
+The formula builds `kcx` from the release's pinned source revision on your Mac and requires the Swift Command Line Tools. This avoids downloading the unsigned executable from the GitHub release; it does not add an Apple Developer ID signature.
+
+The tap checks the latest stable `kcx` release hourly and updates the formula automatically. After an update, upgrade with:
+
+```sh
+brew update
+brew upgrade yutayamate/tap/kcx
+```
+
 ## Automated builds and tests
 
 GitHub Actions builds and tests the project on macOS for branch pushes, pull requests, and manual runs. Tagged releases build and test native Intel (`x86_64`) and Apple Silicon (`arm64`) binaries. Each GitHub Release includes both binaries, an SPDX JSON SBOM and a Sigstore bundle for each, and `SHA256SUMS`.
