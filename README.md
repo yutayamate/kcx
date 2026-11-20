@@ -4,7 +4,9 @@
 
 [![Build and test](https://github.com/yutayamate/kcx/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/yutayamate/kcx/actions/workflows/build.yml) [![Latest release](https://img.shields.io/github/v/release/yutayamate/kcx)](https://github.com/yutayamate/kcx/releases/latest) [![License](https://img.shields.io/github/license/yutayamate/kcx)](LICENSE)
 
-## Install with Homebrew
+## Install
+
+### Homebrew
 
 Install `kcx` from the `yutayamate/tap` Homebrew tap:
 
@@ -21,6 +23,16 @@ Upgrade with:
 brew update
 brew upgrade yutayamate/tap/kcx
 ```
+
+### Build from source
+
+You need Swift Command Line Tools; the full Xcode application is not required. From the repository root, run:
+
+```sh
+swiftc -O -framework Security Sources/kcx/main.swift -o kcx
+```
+
+The resulting `kcx` executable is created in the current directory.
 
 ## Use kcx
 
@@ -144,16 +156,6 @@ Keeping a secret in Keychain and supplying it only when starting a command can r
 This is a way to reduce where secrets are stored; it does not make a compromised Mac safe. Information stealers commonly target saved browser credentials, cookies, and other session data. Although browser password databases may be encrypted, malware running as the logged-in user can sometimes extract credentials from them. Attackers also target local credential files, private keys, shell history, and macOS Keychain itself. [MITRE ATT&CK: browser credentials](https://attack.mitre.org/techniques/T1555/003/), [Keychain](https://attack.mitre.org/techniques/T1555/001/), and the [Australian Cyber Security Centre's information-stealer guidance](https://www.cyber.gov.au/guidance/learn-about-information-stealer-malware).
 
 With `run`, the secret must be present in the child process's environment while it runs. The child and its descendants can read it, and software with sufficient access may inspect process environments. A child can also log or transmit the value. With `generate`, the secret is emitted as JSON to stdout for the helper protocol and is then available to the caller. Keychain access controls, a secure macOS account, and trust in the consuming program remain essential.
-
-## Build from source
-
-You need Swift Command Line Tools; the full Xcode application is not required. From the repository root, run:
-
-```sh
-swiftc -O -framework Security Sources/kcx/main.swift -o kcx
-```
-
-The resulting `kcx` executable is created in the current directory.
 
 ## Automated builds and tests
 
