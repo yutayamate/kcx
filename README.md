@@ -146,11 +146,9 @@ brew tap yutayamate/tap
 brew install yutayamate/tap/kcx
 ```
 
-The tap's GitHub repository is `yutayamate/homebrew-tap`; Homebrew shortens that repository name to `yutayamate/tap` in tap commands.
+The formula builds the pinned source locally and requires the Swift Command Line Tools. The tap checks for new stable releases hourly. This avoids downloading the unsigned release binary.
 
-The formula builds `kcx` from the release's pinned source revision on your Mac and requires the Swift Command Line Tools. This avoids downloading the unsigned executable from the GitHub release; it does not add an Apple Developer ID signature.
-
-The tap checks the latest stable `kcx` release hourly and updates the formula automatically. After an update, upgrade with:
+Upgrade with:
 
 ```sh
 brew update
