@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build
         run: |
@@ -28,7 +28,7 @@ jobs:
         run: sh Tests/integration.sh dist/kcx
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@c2acdedd35a8824a1552c7137f8c18288c3ea469 # v7.0.2
         with:
           name: kcx-macos-${{ runner.arch }}-${{ github.sha }}
           path: |
